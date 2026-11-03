@@ -1,0 +1,47 @@
+node () {
+
+    struct m_req(m_t, m_p, chan done) 
+
+    rpc request(o_req){
+
+        if m_req = null {
+            return // dont want resource
+        } else if m_req < o_req {
+            <- m_req.done // blocking with chan done
+        }
+
+        return // done with resource
+    }
+
+
+    send request(){
+        m_req = {asdasd}
+    }
+
+    start(pi){
+        listen port 5000+pi 
+
+        for { // program loop
+
+            if rand.int % 100 == 2{
+                sendrequers()
+            }
+
+
+            if m_req.done()
+                close(m_req.done)
+        }
+    }
+
+}
+
+
+main {
+int N;
+
+for int i < N{
+    go node().start(i)
+}
+
+
+}
