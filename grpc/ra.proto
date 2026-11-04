@@ -11,6 +11,7 @@ service RAService {
 message ResourceRequest {
   int64 time = 1;
   int64 process_id = 2;
+  
 }
 
 message ResourceResponse {}
