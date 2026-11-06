@@ -2,14 +2,20 @@
 
 Source code for the mandatory activity 4 in Distributed Systems , BSDISYS1KU
 
-## how to use
+## How to use
 
 ### Start the server
 
-in a terminal write
+In a terminal write
 
 ```bash
-go run ./node
+go run ./node -n (Number of nodes)
 ```
 
-then logs should start showing
+Then logs should start showing
+
+The loop runs indefinitely - to stop
+```bash
+ctrl + c
+```
+
