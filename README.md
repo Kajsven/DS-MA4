@@ -13,7 +13,8 @@ go run ./node -n (Number of nodes)
 ```
 
 Then logs should start showing
-Will default to 3 nodes if no flag is given
+
+if n is not set the default is 3 nodes
 
 The loop runs indefinitely - to stop
 ```bash
