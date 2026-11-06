@@ -11,9 +11,13 @@ func main() {
 	flag.Parse()
 	
 	var wg = sync.WaitGroup{}
+	var ready = sync.WaitGroup{}
+	ready.Add(*n)
+	wg.Add(*n)
+
 	for i := 0; i < *n; i++ {
-		wg.Add(1)
-		go createNode(int64(i), *n, &wg)
+		go createNode(int64(i), *n, &wg, &ready)
 	}
+
 	wg.Wait()
 }
