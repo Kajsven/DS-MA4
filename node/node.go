@@ -18,20 +18,20 @@ import (
 
 type Node struct {
 	pb.UnimplementedRAServiceServer
-	id   int64
-	time int64
-	state string
+	id         int64
+	time       int64
+	state      string
 	totalNodes int
 	clientCons map[int64]*grpc.ClientConn
-	request *Request
-	mu sync.Mutex
+	request    *Request
+	mu         sync.Mutex
 }
 
 type Request struct {
-	time int64
-	id  int64
+	time     int64
+	id       int64
 	ackCount int
-	done chan struct{}
+	done     chan struct{}
 }
 
 var scanner = bufio.NewScanner(os.Stdin)
@@ -53,14 +53,18 @@ func requestLessThan(req1 *Request, req2 *Request) bool {
 func (n *Node) GetResource(ctx context.Context, req *pb.ResourceRequest) (*pb.ResourceResponse, error) {
 	n.mu.Lock()
 	n.time = max(n.time, req.Time) + 1
+
+	var wait chan struct{}
+	if n.state == "HELD" || (n.state == "WANTED" && requestLessThan(n.request, &Request{time: req.Time, id: req.ProcessId})) {
+		wait = n.request.done
+	}
 	n.mu.Unlock()
 
-	if n.state == "HELD" || (n.state == "WANTED" && requestLessThan(n.request, &Request{time: req.Time, id: req.ProcessId})) {
-		<-n.request.done
+	if wait != nil {
+		<-wait
 	}
 	return &pb.ResourceResponse{}, nil
 }
-
 
 func createNode(id int64, totalNodes int, wg *sync.WaitGroup, ready *sync.WaitGroup) {
 	defer wg.Done()
@@ -74,10 +78,10 @@ func createNode(id int64, totalNodes int, wg *sync.WaitGroup, ready *sync.WaitGr
 	ready.Wait()
 
 	n := newNode(id, totalNodes)
-	
+
 	n.createConnections()
 	go n.ProcessLoop()
-	
+
 	srv := grpc.NewServer()
 	pb.RegisterRAServiceServer(srv, n)
 
@@ -88,6 +92,8 @@ func createNode(id int64, totalNodes int, wg *sync.WaitGroup, ready *sync.WaitGr
 }
 
 func (n *Node) createConnections() {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	n.clientCons = make(map[int64]*grpc.ClientConn)
 
 	for i := 0; i < n.totalNodes; i++ {
@@ -101,36 +107,38 @@ func (n *Node) createConnections() {
 	}
 }
 
-func (n *Node) sendRequest(targetId int64) {
+func (n *Node) sendRequest(targetId int64, time int64) {
+	n.mu.Lock()
 	msg := pb.ResourceRequest{
-		Time: n.time,
+		Time:      time,
 		ProcessId: n.id,
 	}
-	
+	n.mu.Unlock()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	
 
 	_, err := pb.NewRAServiceClient(n.clientCons[targetId]).GetResource(ctx, &msg)
-	
 
 	if err != nil {
 		log.Printf("Error sending request to node %d: %v", targetId, err)
 		return
 	}
 
+	n.mu.Lock()
 	n.request.ackCount++
+	n.mu.Unlock()
 }
-
 
 func (n *Node) ProcessLoop() {
 	for {
-		log.Printf("Node %d state: %s, time: %d\n", n.id, n.state, n.time)
 		time.Sleep(1 * time.Second)
+		n.mu.Lock()
+		log.Printf("Node %d state: %s, time: %d\n", n.id, n.state, n.time)
 		switch n.state {
 		case "RELEASED":
-			var randomInt int64 = rand.Int63n(int64(n.totalNodes))  //Random resource request interval
-			if randomInt % int64(n.totalNodes) == n.id {
+			var randomInt int64 = rand.Int63n(int64(n.totalNodes)) //Random resource request interval
+			if randomInt%int64(n.totalNodes) == n.id {
 				n.state = "WANTED"
 				n.time++
 				n.request = &Request{
@@ -142,7 +150,7 @@ func (n *Node) ProcessLoop() {
 				log.Printf("Node %d requesting resource at time %d\n", n.id, n.time)
 				for i := 0; i < n.totalNodes; i++ {
 					if int64(i) != n.id {
-						go n.sendRequest(int64(i))
+						go n.sendRequest(int64(i), n.time)
 					}
 				}
 			}
@@ -159,8 +167,6 @@ func (n *Node) ProcessLoop() {
 			close(n.request.done)
 			n.request = nil
 		}
+		n.mu.Unlock()
 	}
 }
-
-
-
